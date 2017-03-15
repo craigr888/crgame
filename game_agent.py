@@ -13,6 +13,7 @@ class Timeout(Exception):
     """Subclass base exception for code clarity."""
     pass
 
+from sample_players import improved_score
 
 def custom_score(game, player):
     """Calculate the heuristic value of a game state from the point of view
@@ -38,7 +39,8 @@ def custom_score(game, player):
     """
 
     # TODO: finish this function!
-    raise NotImplementedError
+    return improved_score(game, player)
+
 
 
 class CustomPlayer:
@@ -72,7 +74,7 @@ class CustomPlayer:
     """
 
     def __init__(self, search_depth=3, score_fn=custom_score,
-                 iterative=True, method='minimax', timeout=10.):
+                 iterative=False, method='alphabeta', timeout=15.):
         self.search_depth = search_depth
         self.iterative = iterative
         self.score = score_fn
@@ -123,20 +125,49 @@ class CustomPlayer:
         # Perform any required initializations, including selecting an initial
         # move from the game board (i.e., an opening book), or returning
         # immediately if there are no legal moves
-
+        if len(legal_moves)==0:
+            return (-1,-1)
+        if game.__last_player_move__[game.__active_player__]==game.NOT_MOVED:
+            move_chosen=(round(game.width/2),round(game.height/2))
+            if game.__last_player_move__[game.__inactive_player__]==game.NOT_MOVED:
+                return move_chosen 
+            else:
+                if game.__last_player_move__[game.__inactive_player__]==game.NOT_MOVED:
+                    move_chosen=(round(game.width/2)-1,round(game.height/2))
+                    return move_chosen
+        base_move=legal_moves[0]
+        move_chosen=None
+        # The search method call (alpha beta or minimax) should happen in
+        # here in order to avoid timeout. The try/except block will
+        # automatically catch the exception raised by the search method
+        # when the timer gets close to expiring
         try:
-            # The search method call (alpha beta or minimax) should happen in
-            # here in order to avoid timeout. The try/except block will
-            # automatically catch the exception raised by the search method
-            # when the timer gets close to expiring
-            pass
-
+            if self.method=='alphabeta' and self.iterative==False:
+                (outscore, move_chosen)=self.alphabeta(game,self.search_depth)
+                return move_chosen
+            if self.method=='alphabeta' and self.iterative==True:
+                for i in range(1,self.search_depth+1):
+                    (outscore, move_chosen)=self.alphabeta(game,i) 
+                del i
+                return move_chosen
+            if self.method=='minimax' and self.iterative==False:
+                (outscore, move_chosen)=self.minimax(game,self.search_depth) 
+                return move_chosen
+            if self.method=='minimax' and self.iterative==True:
+                print('calling minimax iterative')
+                for i in range(1,self.search_depth+1):
+                    (outscore, move_chosen)=self.minimax(game,i) 
+                return move_chosen
         except Timeout:
+            if move_chosen==None:
+                return base_move
+            else:
+                return move_chosen
             # Handle any actions required at timeout, if necessary
             pass
 
         # Return the best move from the last completed search iteration
-        raise NotImplementedError
+        #raise NotImplementedError
 
     def minimax(self, game, depth, maximizing_player=True):
         """Implement the minimax search algorithm as described in the lectures.
@@ -172,17 +203,39 @@ class CustomPlayer:
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
-        # TODO: finish this function!
-        raise NotImplementedError
+        legal_moves=game.get_legal_moves()
+        if depth==0 or len(legal_moves)==0:
+            if maximizing_player==True:
+                return (self.score(game,game.__active_player__), (-1,-1))
+            else:
+                return (self.score(game,game.__inactive_player__), (-1,-1))
+        if maximizing_player==True:
+            node_score=float('-inf')
+            for pmove in game.get_legal_moves():
+                (return_score,return_move) = self.minimax(game.forecast_move(pmove), depth-1,False)
+                if return_score > node_score:
+                    node_score=return_score
+                    node_move=pmove
+            return (node_score, node_move)
+        else:
+            node_score=float('inf')
+            for pmove in game.get_legal_moves():
+                (return_score,return_move) = self.minimax(game.forecast_move(pmove), depth-1, True)
+                if return_score < node_score:
+                    node_score=return_score
+                    node_move=pmove
+            return (node_score, node_move)
+
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf"), maximizing_player=True):
-        """Implement minimax search with alpha-beta pruning as described in the
+        """
+        Implement minimax search with alpha-beta pruning as described in the
         lectures.
 
         Parameters
         ----------
         game : isolation.Board
-            An instance of the Isolation game `Board` class representing the
+        An instance of the Isolation game `Board` class representing the
             current game state
 
         depth : int
@@ -213,8 +266,44 @@ class CustomPlayer:
                 to pass the project unit tests; you cannot call any other
                 evaluation function directly.
         """
+
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
-        # TODO: finish this function!
-        raise NotImplementedError
+        legal_moves=game.get_legal_moves()
+        if depth==0 or len(legal_moves)==0:
+            #so if you're at the terminal node and it's the opposing player's move. 
+            if maximizing_player==True:
+                #print("Max", self.score(game,game.__active_player__),self.score(game,game.__inactive_player__), game.__last_player_move__[game.__active_player__],game.__last_player_move__[game.__inactive_player__])
+                return (self.score(game,game.__active_player__), (-1,-1))
+            else:
+                #print("Min", self.score(game,game.__active_player__),self.score(game,game.__inactive_player__), game.__last_player_move__[game.__active_player__],game.__last_player_move__[game.__inactive_player__])
+                return (self.score(game,game.__inactive_player__), (-1,-1))
+        if maximizing_player==True:
+            node_score=float('-inf')
+            for pmove in game.get_legal_moves():
+                fboard=game.forecast_move(pmove)
+                (return_score,return_move) = self.alphabeta(fboard, depth-1, alpha, beta, False)
+                if return_score > node_score:
+                    node_score=return_score
+                    node_move=pmove
+                alpha=max(alpha,node_score)
+                if beta<=alpha:
+                    break
+            #print('depth', depth, 'level', mstring, 'player name', game.__active_player__.pname_string)
+            #print(game.to_string())
+            return (node_score, node_move)
+        else:
+            node_score=float('inf')
+            for pmove in game.get_legal_moves():
+                fboard=game.forecast_move(pmove)
+                (return_score,return_move) = self.alphabeta(fboard, depth-1, alpha, beta, True)
+                if return_score < node_score:
+                    node_score=return_score
+                    node_move=pmove
+                beta=min(beta,node_score)
+                if beta<=alpha:
+                    break
+            #print('depth', depth, 'level', mstring, 'player name', game.__active_player__.pname_string)
+            #print(game.to_string())
+            return (node_score, node_move)
